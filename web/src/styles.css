@@ -85,6 +85,7 @@ table.runs th, table.runs td { text-align: left; padding: 0.5rem 0.6rem; border-
 table.runs tr.clickable { cursor: pointer; }
 table.runs tr.clickable:hover { background: #fafaf9; }
 .nowrap { white-space: nowrap; }
+table.runs td:nth-child(3) { min-width: 9rem; }
 .details { margin-top: 0.5rem; cursor: auto; }
 .status { font-size: 0.8rem; padding: 0.1rem 0.45rem; border-radius: 4px; background: #efefed; white-space: nowrap; }
 .status.queued { background: #fbf3db; }
