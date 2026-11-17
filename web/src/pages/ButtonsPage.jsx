@@ -9,12 +9,14 @@ export default function ButtonsPage({ onShowRuns }) {
   const [error, setError] = useState(null);
   const [revealed, setRevealed] = useState(null); // { button, secret }
   const [newName, setNewName] = useState('');
+  const [newActionId, setNewActionId] = useState('');
 
   const load = useCallback(async () => {
     try {
       const [b, a] = await Promise.all([api('GET', '/buttons'), api('GET', '/actions')]);
       setButtons(b.buttons);
       setActions(a.actions);
+      setNewActionId((cur) => cur || a.actions[0]?.id || '');
       setError(null);
     } catch (e) {
       setError(e);
@@ -37,9 +39,9 @@ export default function ButtonsPage({ onShowRuns }) {
 
   const create = (e) => {
     e.preventDefault();
-    if (!newName.trim()) return;
+    if (!newName.trim() || buttons === null) return;
     run(async () => {
-      const res = await api('POST', '/buttons', { name: newName.trim(), action_id: actions[0]?.id ?? null });
+      const res = await api('POST', '/buttons', { name: newName.trim(), action_id: newActionId || null });
       setRevealed(res);
       setNewName('');
     });
@@ -58,7 +60,15 @@ export default function ButtonsPage({ onShowRuns }) {
 
       <form className="card row" onSubmit={create}>
         <input placeholder="新按钮名称，例如：补全笔记" value={newName} onChange={(e) => setNewName(e.target.value)} maxLength={128} />
-        <button className="primary" type="submit">
+        <select value={newActionId} onChange={(e) => setNewActionId(e.target.value)} aria-label="操作">
+          <option value="">（暂不选操作）</option>
+          {actions.map((a) => (
+            <option key={a.id} value={a.id}>
+              {a.name}
+            </option>
+          ))}
+        </select>
+        <button className="primary" type="submit" disabled={buttons === null || !newName.trim()}>
           新建按钮
         </button>
       </form>

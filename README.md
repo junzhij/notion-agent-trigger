@@ -115,6 +115,21 @@ npm run dev
 2. Notion 数据库按钮 → 添加动作「Send webhook」→ 填入 URL 和请求头
 3. 点一次按钮：第一次会因为白名单为空被拒绝。到「运行记录」里点「加入白名单」，再点一次即可变成「排队中」
 
+## 当前线上部署（Appwrite 项目 6a4c8b530018b2bc88be，新加坡）
+
+| 组件 | 地址 |
+|---|---|
+| notion-relay | https://notion-relay-6a4c8b53.sgp.appwrite.run/ |
+| admin-api | https://admin-api-6a4c8b53.sgp.appwrite.run/ |
+| 后台站点 | https://notion-admin-6a4c8b53.appwrite.network/ |
+| Clerk 应用 | notion-agent-trigger（development 实例） |
+
+代码直接从 GitHub 分支 tarball 部署（`https://codeload.github.com/junzhij/notion-agent-trigger/tar.gz/claude/codex-credentials-az2o8i`），
+解压后的根目录是 `notion-agent-trigger-claude-codex-credentials-az2o8i/`，所以函数入口和站点构建命令都带这个前缀。
+推送新提交后，用同一个 URL 重新创建 deployment 即可。分支合并或改名后要同步改入口路径。
+
+admin-api 用 `CLERK_JWT_KEY`（Clerk 实例的公钥，来自 JWKS）离线校验 token，不需要 Clerk secret key。
+
 ## 待做
 
 - AI 执行（合规确认后）：凭证表、执行器（从 `queued` 的 runs 取任务）、结果写回、`session_url`
