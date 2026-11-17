@@ -1,0 +1,114 @@
+{
+  "projectId": "6a4c8b530018b2bc88be",
+  "endpoint": "https://sgp.cloud.appwrite.io/v1",
+  "tablesDB": [
+    {
+      "$id": "notion_agent",
+      "name": "notion_agent",
+      "enabled": true
+    }
+  ],
+  "tables": [
+    {
+      "$id": "buttons",
+      "$permissions": [],
+      "databaseId": "notion_agent",
+      "name": "buttons",
+      "enabled": true,
+      "rowSecurity": false,
+      "columns": [
+        { "key": "owner", "type": "varchar", "size": 64, "required": true, "array": false },
+        { "key": "name", "type": "varchar", "size": 128, "required": true, "array": false },
+        { "key": "action_id", "type": "varchar", "size": 36, "required": false, "array": false },
+        { "key": "allowed_notion_user_ids", "type": "varchar", "size": 36, "required": false, "array": true },
+        { "key": "enabled", "type": "boolean", "required": false, "array": false, "default": true },
+        { "key": "automation_id", "type": "varchar", "size": 64, "required": false, "array": false },
+        { "key": "secret_salt", "type": "varchar", "size": 64, "required": true, "array": false },
+        { "key": "secret_hash", "type": "varchar", "size": 64, "required": true, "array": false }
+      ],
+      "indexes": [
+        { "key": "idx_owner", "type": "key", "columns": ["owner"], "orders": ["ASC"] },
+        { "key": "idx_owner_action", "type": "key", "columns": ["owner", "action_id"], "orders": ["ASC", "ASC"] }
+      ]
+    },
+    {
+      "$id": "actions",
+      "$permissions": [],
+      "databaseId": "notion_agent",
+      "name": "actions",
+      "enabled": true,
+      "rowSecurity": false,
+      "columns": [
+        { "key": "owner", "type": "varchar", "size": 64, "required": true, "array": false },
+        { "key": "name", "type": "varchar", "size": 128, "required": true, "array": false },
+        { "key": "prompt_template", "type": "mediumtext", "required": false, "array": false },
+        { "key": "enabled", "type": "boolean", "required": false, "array": false, "default": true }
+      ],
+      "indexes": [
+        { "key": "idx_owner", "type": "key", "columns": ["owner"], "orders": ["ASC"] }
+      ]
+    },
+    {
+      "$id": "runs",
+      "$permissions": [],
+      "databaseId": "notion_agent",
+      "name": "runs",
+      "enabled": true,
+      "rowSecurity": false,
+      "columns": [
+        { "key": "owner", "type": "varchar", "size": 64, "required": true, "array": false },
+        { "key": "button_id", "type": "varchar", "size": 36, "required": true, "array": false },
+        { "key": "action_id", "type": "varchar", "size": 36, "required": false, "array": false },
+        { "key": "status", "type": "string", "format": "enum", "elements": ["queued", "rejected", "dispatched", "failed", "done"], "required": true, "array": false },
+        { "key": "reject_reason", "type": "varchar", "size": 64, "required": false, "array": false },
+        { "key": "page_id", "type": "varchar", "size": 64, "required": false, "array": false },
+        { "key": "page_url", "type": "varchar", "size": 512, "required": false, "array": false },
+        { "key": "page_title", "type": "varchar", "size": 512, "required": false, "array": false },
+        { "key": "clicker_notion_user_id", "type": "varchar", "size": 64, "required": false, "array": false },
+        { "key": "automation_id", "type": "varchar", "size": 64, "required": false, "array": false },
+        { "key": "attempt", "type": "integer", "required": false, "array": false },
+        { "key": "rendered_text", "type": "mediumtext", "required": false, "array": false },
+        { "key": "missing_variables", "type": "varchar", "size": 128, "required": false, "array": true },
+        { "key": "session_url", "type": "varchar", "size": 512, "required": false, "array": false },
+        { "key": "error", "type": "text", "required": false, "array": false }
+      ],
+      "indexes": [
+        { "key": "idx_owner", "type": "key", "columns": ["owner"], "orders": ["ASC"] },
+        { "key": "idx_owner_button", "type": "key", "columns": ["owner", "button_id"], "orders": ["ASC", "ASC"] },
+        { "key": "idx_owner_status", "type": "key", "columns": ["owner", "status"], "orders": ["ASC", "ASC"] }
+      ]
+    }
+  ],
+  "functions": [
+    {
+      "$id": "notion-relay",
+      "name": "notion-relay",
+      "runtime": "node-22",
+      "execute": ["any"],
+      "events": [],
+      "scopes": ["rows.read", "rows.write"],
+      "schedule": "",
+      "timeout": 15,
+      "enabled": true,
+      "logging": true,
+      "entrypoint": "src/relay/main.js",
+      "commands": "npm install --omit=dev",
+      "path": "functions"
+    },
+    {
+      "$id": "admin-api",
+      "name": "admin-api",
+      "runtime": "node-22",
+      "execute": ["any"],
+      "events": [],
+      "scopes": ["rows.read", "rows.write"],
+      "schedule": "",
+      "timeout": 15,
+      "enabled": true,
+      "logging": true,
+      "entrypoint": "src/admin/main.js",
+      "commands": "npm install --omit=dev",
+      "path": "functions"
+    }
+  ]
+}
