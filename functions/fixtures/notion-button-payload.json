@@ -1,0 +1,168 @@
+{
+  "source": {
+    "type": "automation",
+    "automation_id": "846eaf78-5fd3-40a7-bee7-81ab17aca77e",
+    "action_id": "41bc41ba-1344-8137-9947-005ab0048686",
+    "event_id": "87ed7111-8bb7-4443-8314-b9e051609b28",
+    "user_id": "1bfd872b-594c-81a2-9a19-0002e093b3e1",
+    "attempt": 1
+  },
+  "data": {
+    "object": "page",
+    "id": "41ac41ba-1344-81ba-a977-faa8f09d07d0",
+    "created_time": "2026-11-16T06:25:00.000Z",
+    "last_edited_time": "2026-11-16T06:55:00.000Z",
+    "created_by": {
+      "object": "user",
+      "id": "1bfd872b-594c-81a2-9a19-0002e093b3e1"
+    },
+    "last_edited_by": {
+      "object": "user",
+      "id": "1bfd872b-594c-81a2-9a19-0002e093b3e1"
+    },
+    "cover": null,
+    "icon": null,
+    "parent": {
+      "type": "data_source_id",
+      "data_source_id": "41ac41ba-1344-8193-a82c-000bb87f6121",
+      "database_id": "41ac41ba-1344-8157-b3cc-d257711f7504"
+    },
+    "in_trash": false,
+    "is_archived": false,
+    "is_locked": false,
+    "properties": {
+      "掌握程度": {
+        "id": "CCKa",
+        "type": "status",
+        "status": {
+          "id": "766fce45-8617-489c-b2e5-c651067b024e",
+          "name": "待复习",
+          "color": "yellow"
+        }
+      },
+      "最后编辑": {
+        "id": "O%40~B",
+        "type": "last_edited_time",
+        "last_edited_time": "2026-11-16T06:55:00.000Z"
+      },
+      "小节": {
+        "id": "SfQJ",
+        "type": "select",
+        "select": {
+          "id": "e57c8733-a5b3-4d92-8475-7c0cf55e1adb",
+          "name": "3.1 微分中值定理",
+          "color": "orange"
+        }
+      },
+      "后续知识": {
+        "id": "WzhO",
+        "type": "relation",
+        "relation": [
+          {
+            "id": "41ac41ba-1344-810e-897e-d66f899be576"
+          },
+          {
+            "id": "41ac41ba-1344-81cc-bd1c-f84822d47352"
+          }
+        ],
+        "has_more": false
+      },
+      "章节": {
+        "id": "Yv%3F%3B",
+        "type": "select",
+        "select": {
+          "id": "fea9eadb-0adf-47df-907e-aaeb8f977acf",
+          "name": "第三章 微分中值定理与导数的应用",
+          "color": "orange"
+        }
+      },
+      "复习次数": {
+        "id": "fP%3Ep",
+        "type": "number",
+        "number": 1
+      },
+      "手写/截图": {
+        "id": "hZ%5BO",
+        "type": "files",
+        "files": []
+      },
+      "类型": {
+        "id": "kZh%7D",
+        "type": "select",
+        "select": {
+          "id": "0781baf2-b3b0-4636-96a2-7f6218ed7af7",
+          "name": "定理/性质",
+          "color": "purple"
+        }
+      },
+      "重要度": {
+        "id": "ne%60S",
+        "type": "select",
+        "select": {
+          "id": "e853a744-550a-4a4d-b9a8-499674066432",
+          "name": "★★ 常考",
+          "color": "orange"
+        }
+      },
+      "前置知识": {
+        "id": "ojW%5B",
+        "type": "relation",
+        "relation": [],
+        "has_more": false
+      },
+      "来源": {
+        "id": "ow%60k",
+        "type": "select",
+        "select": {
+          "id": "2e91e71d-908d-416a-bf93-af1b01fe05f0",
+          "name": "课堂",
+          "color": "blue"
+        }
+      },
+      "编号": {
+        "id": "v%7CTt",
+        "type": "unique_id",
+        "unique_id": {
+          "prefix": "GS-NOTE",
+          "number": 2
+        }
+      },
+      "教材页码": {
+        "id": "%7C%3E%7DD",
+        "type": "number",
+        "number": 122
+      },
+      "考试范围": {
+        "id": "%7CSe%3B",
+        "type": "multi_select",
+        "multi_select": []
+      },
+      "知识点": {
+        "id": "title",
+        "type": "title",
+        "title": [
+          {
+            "type": "text",
+            "text": {
+              "content": "费马引理",
+              "link": null
+            },
+            "annotations": {
+              "bold": false,
+              "italic": false,
+              "strikethrough": false,
+              "underline": false,
+              "code": false,
+              "color": "default"
+            },
+            "plain_text": "费马引理",
+            "href": null
+          }
+        ]
+      }
+    },
+    "url": "https://app.notion.com/p/41ac41ba134481baa977faa8f09d07d0",
+    "public_url": "https://aethedit.notion.site/41ac41ba134481baa977faa8f09d07d0",
+    "request_id": "287ccb5c-e4a0-4caf-9891-7039de6f89ae"
+  }
+}
