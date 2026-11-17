@@ -115,6 +115,14 @@ npm run dev
 2. Notion 数据库按钮 → 添加动作「Send webhook」→ 填入 URL 和请求头
 3. 点一次按钮：第一次会因为白名单为空被拒绝。到「运行记录」里点「加入白名单」，再点一次即可变成「排队中」
 
+## 从分支 tarball 部署（不用 Appwrite CLI 时）
+
+可以直接用 GitHub 分支 tarball 创建 deployment：`https://codeload.github.com/<owner>/<repo>/tar.gz/<branch>`。
+解压后的根目录是 `<repo>-<branch 中的 / 换成 ->/`，所以函数入口、构建命令和站点输出目录都要带这个前缀。
+推送新提交后用同一个 URL 重新创建 deployment；分支合并或改名后要同步改入口路径。
+
+admin-api 可以只用 `CLERK_JWT_KEY`（Clerk 实例的公钥，来自 JWKS）离线校验 token，不需要 Clerk secret key。
+
 ## 待做
 
 - AI 执行（合规确认后）：凭证表、执行器（从 `queued` 的 runs 取任务）、结果写回、`session_url`
