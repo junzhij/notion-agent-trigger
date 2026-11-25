@@ -143,9 +143,11 @@ npm run dev
 | 后台站点 | https://notion-admin-6a4c8b53.appwrite.network/ |
 | Clerk 应用 | notion-agent-trigger（development 实例） |
 
-代码直接从 GitHub 分支 tarball 部署（`https://codeload.github.com/junzhij/notion-agent-trigger/tar.gz/claude/codex-credentials-az2o8i`），
-解压后的根目录是 `notion-agent-trigger-claude-codex-credentials-az2o8i/`，所以函数入口和站点构建命令都带这个前缀。
+代码直接从 GitHub 分支 tarball 部署（`https://codeload.github.com/junzhij/notion-agent-trigger/tar.gz/claude/dazzling-edison-p5wxbl`），
+解压后的根目录是 `notion-agent-trigger-claude-dazzling-edison-p5wxbl/`，所以函数入口和站点构建命令都带这个前缀。
 推送新提交后，用同一个 URL 重新创建 deployment 即可。分支合并或改名后要同步改入口路径。
+
+两个函数都设置了 `TOKEN_ENC_KEY`（secret 变量）；`credentials` 表里的 token 用它加密，更换后需要重新填写 token。
 
 admin-api 用 `CLERK_JWT_KEY`（Clerk 实例的公钥，来自 JWKS）离线校验 token，不需要 Clerk secret key。
 
