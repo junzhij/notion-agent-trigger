@@ -27,7 +27,9 @@ web/                   后台前端：React + Vite + Clerk，部署到 Appwrite 
    不符 → **401**（可用环境变量 `BAD_SECRET_STATUS=200` 改成 200）
 3. 以 `event_id` 检查是否为重试 → 重复则直接返回 200
 4. 按钮停用 → 拒绝
-5. 未绑定 `automation_id` 则绑定；已绑定但不一致 → 拒绝
+5. **未绑定 = 配置测试**：绑定 `automation_id`、保存 payload 作为按钮的参数样本、白名单为空时加入发送者、
+   按钮没有操作时按参数生成默认提示词（page_id + 各参数 + 处理 @claude 评论），记为 `test`，**不触发 Claude**。
+   已绑定但不一致 → 拒绝；一致时若属性列表有变化则更新样本
 6. 点击者 `source.user_id` 不在白名单 → 拒绝（白名单为空 = 所有人都被拒绝）
 7. 加载操作，用页面属性渲染提示词，并在前面加上固定的页面信息头（标题、page_id、page_url）
 8. 以 `event_id` 为行 ID 创建 run（`queued` 或 `rejected`），冲突视为重试
@@ -55,11 +57,12 @@ web/                   后台前端：React + Vite + Clerk，部署到 Appwrite 
 | GET | `/me` | 当前用户 |
 | GET/POST | `/actions` | 列出 / 新建操作 |
 | PATCH/DELETE | `/actions/:id` | 修改 / 删除（有按钮在用时返回 409） |
-| POST | `/preview` | 用示例 payload（或传入的 `payload`）渲染模板 |
+| POST | `/preview` | 渲染模板：传 `button_id` 用该按钮测试时收到的 payload，否则用示例 payload（或传入的 `payload`） |
 | GET/POST | `/buttons` | 列出 / 新建按钮（新建时返回一次性 `secret`） |
+| GET | `/buttons/:id` | 单个按钮，含 `setup_state`（`waiting_for_test` / `ready`）和 `parameters`（名称、类型、测试时的值） |
 | PATCH/DELETE | `/buttons/:id` | 改名称、操作、白名单、启停 / 删除 |
 | POST | `/buttons/:id/rotate-secret` | 重新生成密钥（返回一次性 `secret`） |
-| POST | `/buttons/:id/unbind` | 解除 automation 绑定 |
+| POST | `/buttons/:id/unbind` | 解除绑定（「重新测试」：下一次请求重新视为配置测试） |
 | GET/POST | `/credentials` | 列出 / 新建 Claude 凭证（`name`、`routine_fire_url`、`token`；token 只写不读） |
 | PATCH/DELETE | `/credentials/:id` | 修改（`token` 可选，填了就替换）/ 删除（有操作在用时返回 409） |
 | POST | `/credentials/:id/test` | 真实触发一次定时任务做连通性测试，返回 `session_url` |
@@ -128,7 +131,8 @@ npm run dev
 
 1. 后台「我的按钮」→ 新建按钮，复制 URL、请求头名称和值（值只显示一次）
 2. Notion 数据库按钮 → 添加动作「Send webhook」→ 填入 URL 和请求头
-3. 点一次按钮：第一次会因为白名单为空被拒绝。到「运行记录」里点「加入白名单」，再点一次即可变成「排队中」
+3. 在 Notion 里点一次按钮作为测试：自动绑定、读取参数、把你加入白名单、生成默认提示词（不触发 Claude）
+4. 后台会自动刷新出参数表和提示词编辑器，改好后保存；之后的点击就会发给 Claude
 
 ## 当前线上部署（Appwrite 项目 6a4c8b530018b2bc88be，新加坡）
 

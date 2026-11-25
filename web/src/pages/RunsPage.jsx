@@ -3,6 +3,7 @@ import { useApi } from '../api.js';
 import { ErrorBox, fmtTime } from '../ui.jsx';
 
 const STATUS_LABELS = {
+  test: '配置测试',
   queued: '排队中',
   rejected: '已拒绝',
   dispatched: '已发送',

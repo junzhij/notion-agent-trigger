@@ -3,7 +3,7 @@
 import { buildVariables, composeDispatchText, renderTemplate, templateVariables, BUILTIN_VARIABLES, MAX_TEXT_LENGTH } from '../lib/template.js';
 import { decryptToken, encryptToken } from '../lib/crypto.js';
 import { describeFireError, fireRoutine, isValidFireUrl, isValidRoutineToken } from '../lib/routine.js';
-import { parseWebhookPayload } from '../lib/notion.js';
+import { describeParameters, parseWebhookPayload } from '../lib/notion.js';
 import { generateId, newSecretRecord } from '../lib/secrets.js';
 import { header, isValidRowId } from '../lib/http.js';
 import { REJECT_REASONS, SECRET_HEADER } from '../relay/handler.js';
@@ -74,6 +74,10 @@ function publicButton(row, relayUrl) {
     enabled: Boolean(row.enabled),
     automation_id: row.automation_id ?? null,
     bound: Boolean(row.automation_id),
+    // waiting_for_test → the next authenticated request is the setup test; ready → bound and sampled
+    setup_state: row.automation_id ? 'ready' : 'waiting_for_test',
+    parameters: describeParameters(parseSample(row.sample_payload)),
+    sample_captured_at: row.sample_captured_at ?? null,
     webhook_url: webhookUrl(relayUrl, row.$id),
     secret_header: SECRET_HEADER,
     created_at: row.$createdAt,
@@ -157,6 +161,15 @@ function publicRun(row) {
     error: row.error ?? null,
     created_at: row.$createdAt,
   };
+}
+
+function parseSample(raw) {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
 }
 
 export function webhookUrl(relayUrl, buttonId) {
@@ -244,10 +257,20 @@ const routes = [
     await store.delete('actions', params[0]);
     return { ok: true };
   }],
-  ['POST', /^\/preview$/, async ({ body }) => {
+  ['POST', /^\/preview$/, async ({ store, owner, body }) => {
     const b = requireObject(body);
     const template = str(b.prompt_template ?? '', 'prompt_template', { max: MAX_TEMPLATE_LENGTH });
-    return preview(template, b.payload);
+    let payload = b.payload;
+    let source = payload ? 'custom' : 'fixture';
+    if (b.button_id !== undefined && b.button_id !== null) {
+      const button = await ownedRow(store, 'buttons', b.button_id, owner);
+      const sample = parseSample(button.sample_payload);
+      if (sample) {
+        payload = sample;
+        source = 'button_sample';
+      }
+    }
+    return { ...preview(template, payload), payload_source: source };
   }],
 
   // Buttons
@@ -288,6 +311,10 @@ const routes = [
       enabled: bool(b.enabled, 'enabled', { optional: true }),
     });
     const row = await store.update('buttons', params[0], patch);
+    return { button: publicButton(row, relayUrl) };
+  }],
+  ['GET', /^\/buttons\/([^/]+)$/, async ({ store, owner, params, relayUrl }) => {
+    const row = await ownedRow(store, 'buttons', params[0], owner);
     return { button: publicButton(row, relayUrl) };
   }],
   ['POST', /^\/buttons\/([^/]+)\/rotate-secret$/, async ({ store, owner, params, relayUrl }) => {
@@ -376,7 +403,7 @@ const routes = [
       where.button_id = query.button_id;
     }
     if (query.status) {
-      if (!['queued', 'rejected', 'dispatched', 'failed', 'done'].includes(query.status)) throw new HttpError(400, 'invalid_field');
+      if (!['test', 'queued', 'rejected', 'dispatched', 'failed', 'done'].includes(query.status)) throw new HttpError(400, 'invalid_field');
       where.status = query.status;
     }
     const limit = Math.min(Math.max(Number.parseInt(query.limit ?? '25', 10) || 25, 1), 100);

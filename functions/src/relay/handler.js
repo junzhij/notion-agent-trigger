@@ -4,12 +4,18 @@
 // returns 200 and is recorded instead. The only exception is a wrong/missing secret
 // (configurable, default 401), so that a misconfigured button is noticed.
 //
+// Setup: the first authenticated request to an unbound button is a *test*. It binds the
+// automation_id, stores the payload as the button's sample (so the admin site can list the
+// page's parameters), adds the sender to an empty whitelist, creates a default action if the
+// button has none, and is recorded as a "test" run. It never triggers Claude.
+//
 // Accepted clicks are recorded as "queued" (keyed by event_id, so Notion retries never fire twice),
 // then dispatched to the owner's Claude Code routine via its API trigger. The run becomes
 // "dispatched" (with session_url) or "failed" (with error). Without a usable credential or
 // encryption key the run stays "queued" with an explanatory error.
 import { parseWebhookPayload } from '../lib/notion.js';
-import { buildVariables, composeDispatchText, renderTemplate } from '../lib/template.js';
+import { buildVariables, composeDispatchText, defaultTemplate, renderTemplate } from '../lib/template.js';
+import { generateId } from '../lib/secrets.js';
 import { decryptToken } from '../lib/crypto.js';
 import { describeFireError, fireRoutine } from '../lib/routine.js';
 import { verifySecret } from '../lib/secrets.js';
@@ -87,16 +93,13 @@ export async function handleRelay(request, deps) {
     rejectReason = 'button_disabled';
   }
 
-  // 3. automation_id binding
+  // 3. Setup test (unbound button) / automation_id binding check
+  if (!button.automation_id && !rejectReason) {
+    return handleSetupTest({ store, log, button, event, body: request.body });
+  }
   if (!rejectReason) {
-    if (!button.automation_id) {
-      if (event.automationId) {
-        await store.update('buttons', button.$id, { automation_id: event.automationId });
-        log(`relay: bound button ${buttonId} to automation ${event.automationId}`);
-      }
-    } else if (button.automation_id !== event.automationId) {
-      rejectReason = 'automation_mismatch';
-    }
+    if (button.automation_id !== event.automationId) rejectReason = 'automation_mismatch';
+    else await refreshSample(store, button, request.body);
   }
 
   // 4. Clicker whitelist (empty list = nobody allowed)
@@ -159,6 +162,75 @@ export async function handleRelay(request, deps) {
   // 7–8. Dispatch to the owner's routine
   const status = await dispatchRun({ store, log, deps, action, owner: button.owner, runId: event.eventId, text: rendered.text });
   return ok({ ok: true, status, run_id: event.eventId });
+}
+
+async function handleSetupTest({ store, log, button, event, body }) {
+  const patch = {
+    automation_id: event.automationId,
+    sample_payload: serialiseSample(body),
+    sample_captured_at: new Date().toISOString(),
+  };
+  const allowed = Array.isArray(button.allowed_notion_user_ids) ? button.allowed_notion_user_ids : [];
+  if (allowed.length === 0 && event.clickerId) patch.allowed_notion_user_ids = [event.clickerId];
+
+  let actionId = button.action_id ?? null;
+  if (!actionId) {
+    actionId = generateId();
+    await store.create('actions', actionId, {
+      owner: button.owner,
+      name: button.name,
+      prompt_template: defaultTemplate(Object.keys(event.properties)),
+      enabled: true,
+    });
+    patch.action_id = actionId;
+  }
+
+  try {
+    await store.create('runs', event.eventId, {
+      owner: button.owner,
+      button_id: button.$id,
+      action_id: actionId,
+      status: 'test',
+      reject_reason: null,
+      page_id: event.pageId,
+      page_url: event.pageUrl,
+      page_title: truncate(event.title, 512),
+      clicker_notion_user_id: event.clickerId,
+      automation_id: event.automationId,
+      attempt: event.attempt,
+      rendered_text: null,
+      missing_variables: [],
+      session_url: null,
+      error: null,
+    });
+  } catch (e) {
+    if (e instanceof ConflictError) return ok({ ok: true, duplicate: true, run_id: event.eventId });
+    throw e;
+  }
+  await store.update('buttons', button.$id, patch);
+  log(`relay: setup test for button ${button.$id}, bound to automation ${event.automationId}`);
+  return ok({ ok: true, status: 'test', run_id: event.eventId });
+}
+
+const MAX_SAMPLE_LENGTH = 200000;
+
+function serialiseSample(body) {
+  const json = JSON.stringify(body ?? null);
+  return json.length > MAX_SAMPLE_LENGTH ? null : json;
+}
+
+/** Keep the sample current when the database's properties change (only writes on change). */
+async function refreshSample(store, button, body) {
+  const names = (o) => Object.keys(o?.data?.properties ?? {}).sort().join('\u0000');
+  let old = null;
+  try {
+    old = button.sample_payload ? JSON.parse(button.sample_payload) : null;
+  } catch {
+    /* ignore */
+  }
+  if (old && names(old) === names(body)) return;
+  const sample = serialiseSample(body);
+  if (sample) await store.update('buttons', button.$id, { sample_payload: sample, sample_captured_at: new Date().toISOString() });
 }
 
 /** Pick the credential for an action: its own credential_id, else the owner's newest enabled one. */
