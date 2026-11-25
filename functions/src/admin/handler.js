@@ -1,6 +1,8 @@
 // admin-api: backend for the admin site. Every route requires a valid Clerk session token,
 // and every row is scoped to the Clerk user ID (`owner`).
-import { buildVariables, renderTemplate, templateVariables, BUILTIN_VARIABLES, MAX_TEXT_LENGTH } from '../lib/template.js';
+import { buildVariables, composeDispatchText, renderTemplate, templateVariables, BUILTIN_VARIABLES, MAX_TEXT_LENGTH } from '../lib/template.js';
+import { decryptToken, encryptToken } from '../lib/crypto.js';
+import { describeFireError, fireRoutine, isValidFireUrl, isValidRoutineToken } from '../lib/routine.js';
 import { parseWebhookPayload } from '../lib/notion.js';
 import { generateId, newSecretRecord } from '../lib/secrets.js';
 import { header, isValidRowId } from '../lib/http.js';
@@ -84,10 +86,54 @@ function publicAction(row) {
     id: row.$id,
     name: row.name,
     prompt_template: row.prompt_template,
+    credential_id: row.credential_id ?? null,
     enabled: Boolean(row.enabled),
     created_at: row.$createdAt,
     updated_at: row.$updatedAt,
   };
+}
+
+function publicCredential(row) {
+  return {
+    id: row.$id,
+    name: row.name,
+    routine_fire_url: row.routine_fire_url,
+    token_last4: row.token_last4 ?? null,
+    enabled: row.enabled !== false,
+    last_used_at: row.last_used_at ?? null,
+    last_error: row.last_error ?? null,
+    created_at: row.$createdAt,
+    updated_at: row.$updatedAt,
+  };
+}
+
+function fireUrl(value, { optional = false } = {}) {
+  if (value === undefined && optional) return undefined;
+  const v = str(value, 'routine_fire_url', { min: 1, max: 512 });
+  if (!isValidFireUrl(v)) {
+    throw new HttpError(400, 'invalid_field', 'routine_fire_url 应形如 https://api.anthropic.com/v1/claude_code/routines/<id>/fire');
+  }
+  return v;
+}
+
+function routineToken(value, tokenKey, { optional = false } = {}) {
+  if ((value === undefined || value === '') && optional) return undefined;
+  const v = str(value, 'token', { min: 1, max: 512 });
+  if (!isValidRoutineToken(v)) throw new HttpError(400, 'invalid_field', 'token 应以 sk-ant- 开头');
+  if (!tokenKey) throw new HttpError(500, 'server_not_configured', '服务器未设置 TOKEN_ENC_KEY');
+  return { token_ciphertext: encryptToken(v, tokenKey), token_last4: v.slice(-4) };
+}
+
+async function assertOwnedCredential(store, credentialId, owner) {
+  if (credentialId === null) return;
+  await ownedRow(store, 'credentials', credentialId, owner).catch(() => {
+    throw new HttpError(400, 'invalid_field', '所选凭证不存在');
+  });
+}
+
+function credentialIdField(value) {
+  if (value === undefined) return undefined;
+  return value === null || value === '' ? null : str(value, 'credential_id', { min: 1, max: 36 });
 }
 
 function publicRun(row) {
@@ -107,6 +153,7 @@ function publicRun(row) {
     rendered_text: row.rendered_text ?? null,
     missing_variables: row.missing_variables ?? [],
     session_url: row.session_url ?? null,
+    credential_id: row.credential_id ?? null,
     error: row.error ?? null,
     created_at: row.$createdAt,
   };
@@ -141,7 +188,9 @@ function preview(template, payload) {
   const parsed = parseWebhookPayload(payload ?? samplePayload);
   if (!parsed.ok) throw new HttpError(400, 'invalid_payload', `示例 payload 无效：${parsed.reason}`);
   const vars = buildVariables(parsed.event);
-  const rendered = renderTemplate(template, vars);
+  const body = renderTemplate(template, vars);
+  const composed = composeDispatchText(vars, body.text);
+  const rendered = { ...body, text: composed.text, tooLong: composed.tooLong };
   return {
     ...rendered,
     used_variables: templateVariables(template),
@@ -163,8 +212,11 @@ const routes = [
   }],
   ['POST', /^\/actions$/, async ({ store, owner, body }) => {
     const b = requireObject(body);
+    const credentialId = credentialIdField(b.credential_id) ?? null;
+    await assertOwnedCredential(store, credentialId, owner);
     const row = await store.create('actions', generateId(), {
       owner,
+      credential_id: credentialId,
       name: str(b.name, 'name', { min: 1, max: 128 }),
       prompt_template: str(b.prompt_template ?? '', 'prompt_template', { max: MAX_TEMPLATE_LENGTH }),
       enabled: bool(b.enabled ?? true, 'enabled'),
@@ -174,7 +226,10 @@ const routes = [
   ['PATCH', /^\/actions\/([^/]+)$/, async ({ store, owner, body, params }) => {
     await ownedRow(store, 'actions', params[0], owner);
     const b = requireObject(body);
+    const credentialId = credentialIdField(b.credential_id);
+    if (credentialId !== undefined) await assertOwnedCredential(store, credentialId, owner);
     const patch = stripUndefined({
+      credential_id: credentialId,
       name: str(b.name, 'name', { min: 1, max: 128, optional: true }),
       prompt_template: str(b.prompt_template, 'prompt_template', { max: MAX_TEMPLATE_LENGTH, optional: true }),
       enabled: bool(b.enabled, 'enabled', { optional: true }),
@@ -252,6 +307,67 @@ const routes = [
     return { ok: true };
   }],
 
+  // Claude routine credentials (token is write-only)
+  ['GET', /^\/credentials$/, async ({ store, owner }) => {
+    const { rows } = await store.list('credentials', { where: { owner }, limit: 100 });
+    return { credentials: rows.map(publicCredential) };
+  }],
+  ['POST', /^\/credentials$/, async ({ store, owner, body, tokenKey }) => {
+    const b = requireObject(body);
+    const row = await store.create('credentials', generateId(), {
+      owner,
+      name: str(b.name ?? 'Claude routine', 'name', { min: 1, max: 128 }),
+      routine_fire_url: fireUrl(b.routine_fire_url),
+      ...routineToken(b.token, tokenKey),
+      enabled: bool(b.enabled ?? true, 'enabled'),
+      last_used_at: null,
+      last_error: null,
+    });
+    return { status: 201, body: { credential: publicCredential(row) } };
+  }],
+  ['PATCH', /^\/credentials\/([^/]+)$/, async ({ store, owner, body, params, tokenKey }) => {
+    await ownedRow(store, 'credentials', params[0], owner);
+    const b = requireObject(body);
+    const patch = stripUndefined({
+      name: str(b.name, 'name', { min: 1, max: 128, optional: true }),
+      routine_fire_url: fireUrl(b.routine_fire_url, { optional: true }),
+      enabled: bool(b.enabled, 'enabled', { optional: true }),
+      ...(routineToken(b.token, tokenKey, { optional: true }) ?? {}),
+    });
+    if (patch.token_ciphertext) patch.last_error = null;
+    const row = await store.update('credentials', params[0], patch);
+    return { credential: publicCredential(row) };
+  }],
+  ['DELETE', /^\/credentials\/([^/]+)$/, async ({ store, owner, params }) => {
+    await ownedRow(store, 'credentials', params[0], owner);
+    const { total } = await store.list('actions', { where: { owner, credential_id: params[0] }, limit: 1 });
+    if (total > 0) throw new HttpError(409, 'credential_in_use', '还有操作在使用这个凭证，请先改掉操作的凭证');
+    await store.delete('credentials', params[0]);
+    return { ok: true };
+  }],
+  ['POST', /^\/credentials\/([^/]+)\/test$/, async ({ store, owner, params, body, tokenKey, fetchImpl }) => {
+    const row = await ownedRow(store, 'credentials', params[0], owner);
+    if (!tokenKey) throw new HttpError(500, 'server_not_configured', '服务器未设置 TOKEN_ENC_KEY');
+    let token;
+    try {
+      token = decryptToken(row.token_ciphertext, tokenKey);
+    } catch {
+      throw new HttpError(400, 'token_decrypt_failed', '凭证无法解密，请重新保存 token');
+    }
+    const text = body && typeof body.text === 'string' && body.text.trim()
+      ? str(body.text, 'text', { min: 1, max: 2000 })
+      : '这是来自 Notion 按钮后台的连通性测试，没有目标页面。不要修改任何 Notion 内容，直接回复 "pong" 即可。';
+    const result = await fireRoutine({ url: row.routine_fire_url, token, text, fetchImpl });
+    const now = new Date().toISOString();
+    if (result.ok) {
+      await store.update('credentials', row.$id, { last_used_at: now, last_error: null });
+      return { ok: true, session_url: result.sessionUrl, session_id: result.sessionId };
+    }
+    const error = describeFireError(result);
+    await store.update('credentials', row.$id, { last_used_at: now, last_error: error.slice(0, 1000) });
+    return { ok: false, status: result.status, error };
+  }],
+
   // Runs
   ['GET', /^\/runs$/, async ({ store, owner, query }) => {
     const where = { owner };
@@ -294,7 +410,7 @@ export function normalisePath(path) {
 
 /**
  * @param {{ method: string, path: string, query: object, headers: object, body: unknown, bodyInvalid?: boolean }} request
- * @param {{ store: object, verifyToken: (token: string) => Promise<{ sub: string }>, relayUrl?: string, log?: Function }} deps
+ * @param {{ store: object, verifyToken: (token: string) => Promise<{ sub: string }>, relayUrl?: string, log?: Function, tokenKey?: Buffer|null, fetch?: Function }} deps
  */
 export async function handleAdmin(request, deps) {
   const log = deps.log ?? (() => {});
@@ -328,6 +444,8 @@ export async function handleAdmin(request, deps) {
         query: request.query ?? {},
         params: found.slice(1).map(decodeURIComponent),
         relayUrl: deps.relayUrl,
+        tokenKey: deps.tokenKey ?? null,
+        fetchImpl: deps.fetch,
       });
       if (result && typeof result.status === 'number' && 'body' in result) return result;
       return { status: 200, body: result };

@@ -42,6 +42,7 @@
         { "key": "owner", "type": "varchar", "size": 64, "required": true, "array": false },
         { "key": "name", "type": "varchar", "size": 128, "required": true, "array": false },
         { "key": "prompt_template", "type": "mediumtext", "required": false, "array": false },
+        { "key": "credential_id", "type": "varchar", "size": 36, "required": false, "array": false },
         { "key": "enabled", "type": "boolean", "required": false, "array": false, "default": true }
       ],
       "indexes": [
@@ -70,12 +71,35 @@
         { "key": "rendered_text", "type": "mediumtext", "required": false, "array": false },
         { "key": "missing_variables", "type": "varchar", "size": 128, "required": false, "array": true },
         { "key": "session_url", "type": "varchar", "size": 512, "required": false, "array": false },
-        { "key": "error", "type": "text", "required": false, "array": false }
+        { "key": "error", "type": "text", "required": false, "array": false },
+        { "key": "credential_id", "type": "varchar", "size": 36, "required": false, "array": false }
       ],
       "indexes": [
         { "key": "idx_owner", "type": "key", "columns": ["owner"], "orders": ["ASC"] },
         { "key": "idx_owner_button", "type": "key", "columns": ["owner", "button_id"], "orders": ["ASC", "ASC"] },
         { "key": "idx_owner_status", "type": "key", "columns": ["owner", "status"], "orders": ["ASC", "ASC"] }
+      ]
+    },
+    {
+      "$id": "credentials",
+      "$permissions": [],
+      "databaseId": "notion_agent",
+      "name": "credentials",
+      "enabled": true,
+      "rowSecurity": false,
+      "columns": [
+        { "key": "owner", "type": "varchar", "size": 64, "required": true, "array": false },
+        { "key": "name", "type": "varchar", "size": 128, "required": true, "array": false },
+        { "key": "routine_fire_url", "type": "varchar", "size": 512, "required": true, "array": false },
+        { "key": "token_ciphertext", "type": "text", "required": true, "array": false },
+        { "key": "token_last4", "type": "varchar", "size": 8, "required": false, "array": false },
+        { "key": "enabled", "type": "boolean", "required": false, "array": false, "default": true },
+        { "key": "last_used_at", "type": "datetime", "required": false, "array": false },
+        { "key": "last_error", "type": "text", "required": false, "array": false }
+      ],
+      "indexes": [
+        { "key": "idx_owner", "type": "key", "columns": ["owner"], "orders": ["ASC"] },
+        { "key": "idx_owner_enabled", "type": "key", "columns": ["owner", "enabled"], "orders": ["ASC", "ASC"] }
       ]
     }
   ],
@@ -88,7 +112,7 @@
       "events": [],
       "scopes": ["rows.read", "rows.write"],
       "schedule": "",
-      "timeout": 15,
+      "timeout": 20,
       "enabled": true,
       "logging": true,
       "entrypoint": "src/relay/main.js",
@@ -103,7 +127,7 @@
       "events": [],
       "scopes": ["rows.read", "rows.write"],
       "schedule": "",
-      "timeout": 15,
+      "timeout": 20,
       "enabled": true,
       "logging": true,
       "entrypoint": "src/admin/main.js",

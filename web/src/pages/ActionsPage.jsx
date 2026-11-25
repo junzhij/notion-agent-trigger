@@ -92,6 +92,8 @@ function ActionEditor({ action, onSaved, onDeleted }) {
   const [name, setName] = useState(action.name);
   const [template, setTemplate] = useState(action.prompt_template);
   const [enabled, setEnabled] = useState(action.enabled);
+  const [credentialId, setCredentialId] = useState(action.credential_id ?? '');
+  const [credentials, setCredentials] = useState([]);
   const [preview, setPreview] = useState(null);
   const [error, setError] = useState(null);
   const [saved, setSaved] = useState(false);
@@ -109,12 +111,27 @@ function ActionEditor({ action, onSaved, onDeleted }) {
     return () => clearTimeout(t);
   }, [api, template]);
 
-  const dirty = name !== action.name || template !== action.prompt_template || enabled !== action.enabled;
+  useEffect(() => {
+    api('GET', '/credentials')
+      .then((res) => setCredentials(res.credentials))
+      .catch(setError);
+  }, [api]);
+
+  const dirty =
+    name !== action.name ||
+    template !== action.prompt_template ||
+    enabled !== action.enabled ||
+    credentialId !== (action.credential_id ?? '');
 
   const save = async () => {
     try {
       setError(null);
-      await api('PATCH', `/actions/${action.id}`, { name, prompt_template: template, enabled });
+      await api('PATCH', `/actions/${action.id}`, {
+        name,
+        prompt_template: template,
+        enabled,
+        credential_id: credentialId || null,
+      });
       setSaved(true);
       setTimeout(() => setSaved(false), 1500);
       await onSaved();
@@ -157,6 +174,18 @@ function ActionEditor({ action, onSaved, onDeleted }) {
       </div>
 
       <label>
+        使用的 Claude 凭证
+        <select value={credentialId} onChange={(e) => setCredentialId(e.target.value)}>
+          <option value="">默认（最新的已启用凭证）</option>
+          {credentials.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}（••••{c.token_last4}）{c.enabled ? '' : '［停用］'}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label>
         提示词模板
         <textarea ref={textareaRef} rows={12} value={template} onChange={(e) => setTemplate(e.target.value)} className="mono" />
       </label>
@@ -171,7 +200,7 @@ function ActionEditor({ action, onSaved, onDeleted }) {
               </button>
             ))}
           </div>
-          <h4>预览（用示例页面「费马引理」渲染）</h4>
+          <h4>预览：实际发给 Claude 的文本（用示例页面「费马引理」渲染）</h4>
           {preview.missing.length > 0 && <p className="warn">未知变量（会被替换为空）：{preview.missing.join('、')}</p>}
           {preview.tooLong && <p className="warn">渲染结果超过 {preview.max_length} 字符。</p>}
           <pre className="preview">{preview.text}</pre>

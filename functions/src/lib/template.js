@@ -84,3 +84,18 @@ export function renderTemplate(template, vars) {
     tooLong: text.length > MAX_TEXT_LENGTH,
   };
 }
+
+/**
+ * Final text sent to the routine: a fixed header naming the target page (the generic routine
+ * prompt relies on it), followed by the rendered action template.
+ */
+export function composeDispatchText(vars, renderedText) {
+  const header = [
+    '[Notion 按钮触发]',
+    `页面标题：${formatValue(vars.page_title)}`,
+    `page_id：${formatValue(vars.page_id)}`,
+    `page_url：${formatValue(vars.page_url)}`,
+  ].join('\n');
+  const text = `${header}\n\n${renderedText ?? ''}`.trimEnd();
+  return { text, tooLong: text.length > MAX_TEXT_LENGTH };
+}
