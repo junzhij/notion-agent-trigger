@@ -3,9 +3,9 @@
 点击 Notion 数据库里的按钮 → 后台校验、去重、渲染提示词 → 记录为一次运行（run）。
 设计见 [HANDOFF.md](HANDOFF.md)。
 
-> **当前范围：只做到「Notion → 后台」这一段。** AI 执行部分（凭证存储、调用 Claude routine / Codex）
-> 要等合规确认后再做。现在被接受的点击会以 `queued` 状态写入 `runs`，渲染好的提示词保存在
-> `rendered_text`，之后的执行器可以直接从这里取任务。
+被接受的点击会先以 `queued` 写入 `runs`（行 ID = event_id，Notion 重试不会重复触发），
+然后用按钮所有者的 Claude 凭证调用定时任务的 **API 触发器**：成功 → `dispatched` 并记录 `session_url`；
+失败（含 429 限流）→ `failed` 并记录 `error`。没有可用凭证或未设置 `TOKEN_ENC_KEY` 时保持 `queued`。
 
 ## 目录
 
@@ -29,8 +29,10 @@ web/                   后台前端：React + Vite + Clerk，部署到 Appwrite 
 4. 按钮停用 → 拒绝
 5. 未绑定 `automation_id` 则绑定；已绑定但不一致 → 拒绝
 6. 点击者 `source.user_id` 不在白名单 → 拒绝（白名单为空 = 所有人都被拒绝）
-7. 加载操作，用页面属性渲染提示词
+7. 加载操作，用页面属性渲染提示词，并在前面加上固定的页面信息头（标题、page_id、page_url）
 8. 以 `event_id` 为行 ID 创建 run（`queued` 或 `rejected`），冲突视为重试
+9. 选凭证（操作指定的 `credential_id`，否则所有者最新的已启用凭证）→ 解密 token → `POST /fire`
+   → 更新 run 为 `dispatched`（带 `session_url`）或 `failed`（带 `error`）
 
 除密钥错误外，所有业务拒绝都返回 200 并记录，避免 Notion 自动暂停该自动化。
 意外的后端错误也返回 200（只记日志），代价是这次点击会丢失。
@@ -58,6 +60,9 @@ web/                   后台前端：React + Vite + Clerk，部署到 Appwrite 
 | PATCH/DELETE | `/buttons/:id` | 改名称、操作、白名单、启停 / 删除 |
 | POST | `/buttons/:id/rotate-secret` | 重新生成密钥（返回一次性 `secret`） |
 | POST | `/buttons/:id/unbind` | 解除 automation 绑定 |
+| GET/POST | `/credentials` | 列出 / 新建 Claude 凭证（`name`、`routine_fire_url`、`token`；token 只写不读） |
+| PATCH/DELETE | `/credentials/:id` | 修改（`token` 可选，填了就替换）/ 删除（有操作在用时返回 409） |
+| POST | `/credentials/:id/test` | 真实触发一次定时任务做连通性测试，返回 `session_url` |
 | GET | `/runs?button_id=&status=&limit=&cursor=` | 运行记录（新的在前，游标分页） |
 | GET | `/runs/:id` | 单条运行记录 |
 
@@ -87,6 +92,7 @@ appwrite push functions
 | 函数 | 变量 | 值 |
 |---|---|---|
 | 两个都要 | `DATABASE_ID` | `notion_agent`（默认值，可不设） |
+| 两个都要 | `TOKEN_ENC_KEY` | 32 字节随机密钥（base64 或 hex），用于 AES-256-GCM 加密 token。两个函数必须一致；更换后已存的 token 需要重新填写。生成：`openssl rand -base64 32` |
 | notion-relay | `BAD_SECRET_STATUS` | 可选，默认 `401` |
 | admin-api | `CLERK_SECRET_KEY` 或 `CLERK_JWT_KEY` | Clerk 密钥（二选一，JWT key 可免网络校验） |
 | admin-api | `ALLOWED_ORIGINS` | 后台站点的 origin，逗号分隔，如 `https://admin.example.appwrite.network,http://localhost:5173`；同时用作 CORS 白名单和 Clerk `authorizedParties` |
@@ -109,7 +115,16 @@ npm install
 npm run dev
 ```
 
-### 4. Notion
+### 4. Claude 定时任务（API 触发）
+
+1. claude.ai → Scheduled → New task，Trigger 选 **API**，Repository 选 None，云环境要开启 Notion 连接器
+2. Instructions 写成通用提示词：按收到的 text 执行；text 开头的 page_id / page_url 是目标页面；结果用 Notion 连接器写回该页
+3. 保存后复制触发地址和 token（只显示一次），到后台「Claude 凭证」添加，点「测试」确认
+4. 调用格式（`functions/src/lib/routine.js`）：`Authorization: Bearer <token>`、`anthropic-version: 2023-06-01`、
+   `anthropic-beta: experimental-cc-routine-2026-04-01`，body `{"text": "..."}`。两个版本头可用环境变量
+   `ROUTINE_ANTHROPIC_VERSION` / `ROUTINE_ANTHROPIC_BETA` 覆盖
+
+### 5. Notion
 
 1. 后台「我的按钮」→ 新建按钮，复制 URL、请求头名称和值（值只显示一次）
 2. Notion 数据库按钮 → 添加动作「Send webhook」→ 填入 URL 和请求头
@@ -125,5 +140,5 @@ admin-api 可以只用 `CLERK_JWT_KEY`（Clerk 实例的公钥，来自 JWKS）�
 
 ## 待做
 
-- AI 执行（合规确认后）：凭证表、执行器（从 `queued` 的 runs 取任务）、结果写回、`session_url`
+- 失败 / 排队中的 run 手动重试
 - 第一个按钮的具体操作内容

@@ -5,6 +5,7 @@ import { verifyToken } from '@clerk/backend';
 import { handleAdmin } from './handler.js';
 import { appwriteConfig, header, readJsonBody } from '../lib/http.js';
 import { createAppwriteStore, tableIdsFromEnv } from '../lib/store.js';
+import { parseEncryptionKey } from '../lib/crypto.js';
 
 function allowedOrigins() {
   return (process.env.ALLOWED_ORIGINS || '')
@@ -50,6 +51,7 @@ export default async ({ req, res, log, error }) => {
     {
       store,
       relayUrl: process.env.RELAY_URL,
+      tokenKey: parseEncryptionKey(process.env.TOKEN_ENC_KEY),
       log: error,
       verifyToken: (token) =>
         verifyToken(token, {

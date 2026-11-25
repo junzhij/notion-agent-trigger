@@ -4,10 +4,14 @@
 // returns 200 and is recorded instead. The only exception is a wrong/missing secret
 // (configurable, default 401), so that a misconfigured button is noticed.
 //
-// The AI dispatch step is intentionally not implemented yet: accepted clicks are stored with
-// status "queued" and the rendered prompt in `rendered_text`, ready for a future executor.
+// Accepted clicks are recorded as "queued" (keyed by event_id, so Notion retries never fire twice),
+// then dispatched to the owner's Claude Code routine via its API trigger. The run becomes
+// "dispatched" (with session_url) or "failed" (with error). Without a usable credential or
+// encryption key the run stays "queued" with an explanatory error.
 import { parseWebhookPayload } from '../lib/notion.js';
-import { buildVariables, renderTemplate } from '../lib/template.js';
+import { buildVariables, composeDispatchText, renderTemplate } from '../lib/template.js';
+import { decryptToken } from '../lib/crypto.js';
+import { describeFireError, fireRoutine } from '../lib/routine.js';
 import { verifySecret } from '../lib/secrets.js';
 import { ConflictError } from '../lib/store.js';
 import { header, isValidRowId } from '../lib/http.js';
@@ -110,7 +114,12 @@ export async function handleRelay(request, deps) {
       action = await store.get('actions', button.action_id);
       if (!action || action.owner !== button.owner) rejectReason = 'action_missing';
       else if (!action.enabled) rejectReason = 'action_disabled';
-      else rendered = renderTemplate(action.prompt_template, buildVariables(event));
+      else {
+        const vars = buildVariables(event);
+        const body = renderTemplate(action.prompt_template, vars);
+        const composed = composeDispatchText(vars, body.text);
+        rendered = { ...body, text: composed.text, tooLong: composed.tooLong };
+      }
     }
   }
 
@@ -144,7 +153,59 @@ export async function handleRelay(request, deps) {
   }
 
   log(`relay: event ${event.eventId} button ${buttonId} → ${run.status}${rejectReason ? ` (${rejectReason})` : ''}`);
-  return ok({ ok: !rejectReason, status: run.status, reason: rejectReason, run_id: event.eventId });
+  if (rejectReason) return ok({ ok: false, status: run.status, reason: rejectReason, run_id: event.eventId });
+  if (rendered.tooLong) return ok({ ok: true, status: 'queued', run_id: event.eventId });
+
+  // 7–8. Dispatch to the owner's routine
+  const status = await dispatchRun({ store, log, deps, action, owner: button.owner, runId: event.eventId, text: rendered.text });
+  return ok({ ok: true, status, run_id: event.eventId });
+}
+
+/** Pick the credential for an action: its own credential_id, else the owner's newest enabled one. */
+export async function resolveCredential(store, action, owner) {
+  if (action?.credential_id) {
+    const c = await store.get('credentials', action.credential_id);
+    return c && c.owner === owner && c.enabled !== false ? c : null;
+  }
+  const { rows } = await store.list('credentials', { where: { owner, enabled: true }, limit: 1 });
+  return rows[0] ?? null;
+}
+
+async function dispatchRun({ store, log, deps, action, owner, runId, text }) {
+  const credential = await resolveCredential(store, action, owner);
+  if (!credential) {
+    await store.update('runs', runId, { error: 'no_credential: 没有可用的 Claude 凭证' });
+    log(`relay: run ${runId} has no credential, left queued`);
+    return 'queued';
+  }
+  if (!deps.tokenKey) {
+    await store.update('runs', runId, { error: 'server_not_configured: TOKEN_ENC_KEY 未设置' });
+    log('relay: TOKEN_ENC_KEY missing, run left queued');
+    return 'queued';
+  }
+
+  let token;
+  try {
+    token = decryptToken(credential.token_ciphertext, deps.tokenKey);
+  } catch {
+    await store.update('runs', runId, { status: 'failed', error: 'token_decrypt_failed: 凭证无法解密，请重新保存 token' });
+    log(`relay: run ${runId} credential ${credential.$id} could not be decrypted`);
+    return 'failed';
+  }
+
+  const result = await fireRoutine({ url: credential.routine_fire_url, token, text, fetchImpl: deps.fetch, env: deps.env });
+  const now = new Date().toISOString();
+  if (result.ok) {
+    await store.update('runs', runId, { status: 'dispatched', session_url: result.sessionUrl, error: null, credential_id: credential.$id });
+    await store.update('credentials', credential.$id, { last_used_at: now, last_error: null }).catch(() => {});
+    log(`relay: run ${runId} dispatched`);
+    return 'dispatched';
+  }
+  const error = describeFireError(result);
+  await store.update('runs', runId, { status: 'failed', error, credential_id: credential.$id });
+  await store.update('credentials', credential.$id, { last_used_at: now, last_error: error.slice(0, 1000) }).catch(() => {});
+  log(`relay: run ${runId} fire failed (HTTP ${result.status})`);
+  return 'failed';
 }
 
 function truncate(value, max) {

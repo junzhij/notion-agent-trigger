@@ -52,7 +52,8 @@ test('happy path: binds automation, queues run with rendered text', async () => 
   assert.equal(run.owner, 'user_a');
   assert.equal(run.button_id, 'btn1');
   assert.equal(run.page_title, '费马引理');
-  assert.equal(run.rendered_text, '补全「费马引理」 https://app.notion.com/p/41ac41ba134481baa977faa8f09d07d0');
+  assert.equal(run.rendered_text, '[Notion 按钮触发]\n页面标题：费马引理\npage_id：41ac41ba-1344-81ba-a977-faa8f09d07d0\npage_url：https://app.notion.com/p/41ac41ba134481baa977faa8f09d07d0\n\n' + '补全「费马引理」 https://app.notion.com/p/41ac41ba134481baa977faa8f09d07d0');
+  assert.match(run.error, /^no_credential/);
   assert.equal((await store.get('buttons', 'btn1')).automation_id, AUTOMATION);
 });
 

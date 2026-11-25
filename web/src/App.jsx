@@ -3,11 +3,13 @@ import { Show, SignInButton, UserButton } from '@clerk/react';
 import ActionsPage from './pages/ActionsPage.jsx';
 import ButtonsPage from './pages/ButtonsPage.jsx';
 import RunsPage from './pages/RunsPage.jsx';
+import CredentialsPage from './pages/CredentialsPage.jsx';
 
 const TABS = [
   { id: 'buttons', label: '我的按钮' },
   { id: 'actions', label: '操作模板' },
   { id: 'runs', label: '运行记录' },
+  { id: 'credentials', label: 'Claude 凭证' },
 ];
 
 export default function App() {
@@ -48,6 +50,7 @@ export default function App() {
             />
           )}
           {tab === 'actions' && <ActionsPage />}
+          {tab === 'credentials' && <CredentialsPage />}
           {tab === 'runs' && <RunsPage buttonId={runsFilter} onClearFilter={() => setRunsFilter(null)} />}
         </Show>
       </main>

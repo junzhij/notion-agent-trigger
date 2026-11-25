@@ -4,6 +4,7 @@
 import { handleRelay } from './handler.js';
 import { appwriteConfig, readJsonBody } from '../lib/http.js';
 import { createAppwriteStore, tableIdsFromEnv } from '../lib/store.js';
+import { parseEncryptionKey } from '../lib/crypto.js';
 
 export default async ({ req, res, log, error }) => {
   if (req.method !== 'POST') {
@@ -17,7 +18,7 @@ export default async ({ req, res, log, error }) => {
   try {
     const result = await handleRelay(
       { query: req.query ?? {}, headers: req.headers ?? {}, body: body.value, bodyInvalid: !body.ok },
-      { store, log, badSecretStatus },
+      { store, log, badSecretStatus, tokenKey: parseEncryptionKey(process.env.TOKEN_ENC_KEY) },
     );
     return res.json(result.body, result.status);
   } catch (e) {
