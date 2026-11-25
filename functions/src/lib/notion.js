@@ -147,3 +147,17 @@ export function parseWebhookPayload(body) {
     },
   };
 }
+
+/**
+ * Parameters available in a captured payload: one entry per page property with its Notion type
+ * and the formatted sample value. Used by the admin site after the setup test webhook.
+ */
+export function describeParameters(body) {
+  const properties = body?.data?.properties;
+  if (!properties || typeof properties !== 'object') return [];
+  return Object.entries(properties).map(([name, prop]) => ({
+    name,
+    type: typeof prop?.type === 'string' ? prop.type : 'unknown',
+    value: propertyValue(prop),
+  }));
+}

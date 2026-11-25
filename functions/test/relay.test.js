@@ -21,7 +21,7 @@ function setup({ button = {}, action = {} } = {}) {
         action_id: 'act1',
         allowed_notion_user_ids: [CLICKER],
         enabled: true,
-        automation_id: null,
+        automation_id: AUTOMATION,
         secret_salt,
         secret_hash,
         ...button,
@@ -42,7 +42,49 @@ function setup({ button = {}, action = {} } = {}) {
   return { store, secret, call, logs };
 }
 
-test('happy path: binds automation, queues run with rendered text', async () => {
+test('setup test: first request to an unbound button binds, samples, whitelists and creates a default action', async () => {
+  const { store, call } = setup({ button: { automation_id: null, action_id: null, allowed_notion_user_ids: [] } });
+  const res = await call();
+  assert.equal(res.status, 200);
+  assert.equal(res.body.status, 'test');
+  const button = await store.get('buttons', 'btn1');
+  assert.equal(button.automation_id, AUTOMATION);
+  assert.deepEqual(button.allowed_notion_user_ids, [CLICKER]);
+  assert.deepEqual(JSON.parse(button.sample_payload), payload);
+  assert.ok(button.sample_captured_at);
+  const action = await store.get('actions', button.action_id);
+  assert.equal(action.owner, 'user_a');
+  assert.match(action.prompt_template, /- 知识点：\{\{知识点\}\}/);
+  assert.match(action.prompt_template, /- 教材页码：\{\{教材页码\}\}/);
+  assert.match(action.prompt_template, /@claude/);
+  assert.match(action.prompt_template, /\{\{page_id\}\}/);
+  const run = await store.get('runs', EVENT);
+  assert.equal(run.status, 'test');
+  assert.equal(run.rendered_text, null);
+
+  // Retry of the test is deduplicated; the next real click is processed normally.
+  assert.equal((await call()).body.duplicate, true);
+  const click = structuredClone(payload);
+  click.source.event_id = 'bbbbbbbb-0000-0000-0000-000000000000';
+  assert.equal((await call({ body: click })).body.status, 'queued');
+});
+
+test('setup test keeps an existing action and whitelist', async () => {
+  const { store, call } = setup({ button: { automation_id: null, allowed_notion_user_ids: ['00000000-0000-0000-0000-000000000000'] } });
+  await call();
+  const button = await store.get('buttons', 'btn1');
+  assert.equal(button.action_id, 'act1');
+  assert.deepEqual(button.allowed_notion_user_ids, ['00000000-0000-0000-0000-000000000000']);
+  assert.equal(store.tables.actions.size, 1);
+});
+
+test('sample is refreshed when the property set changes', async () => {
+  const { store, call } = setup({ button: { sample_payload: JSON.stringify({ data: { properties: { 旧: {} } } }) } });
+  await call();
+  assert.deepEqual(JSON.parse((await store.get('buttons', 'btn1')).sample_payload), payload);
+});
+
+test('happy path: queues run with rendered text', async () => {
   const { store, call } = setup();
   const res = await call();
   assert.equal(res.status, 200);
@@ -54,7 +96,6 @@ test('happy path: binds automation, queues run with rendered text', async () => 
   assert.equal(run.page_title, '费马引理');
   assert.equal(run.rendered_text, '[Notion 按钮触发]\n页面标题：费马引理\npage_id：41ac41ba-1344-81ba-a977-faa8f09d07d0\npage_url：https://app.notion.com/p/41ac41ba134481baa977faa8f09d07d0\n\n' + '补全「费马引理」 https://app.notion.com/p/41ac41ba134481baa977faa8f09d07d0');
   assert.match(run.error, /^no_credential/);
-  assert.equal((await store.get('buttons', 'btn1')).automation_id, AUTOMATION);
 });
 
 test('retries with the same event_id are deduplicated', async () => {
@@ -74,7 +115,7 @@ test('wrong or missing secret returns 401 and records nothing', async () => {
   assert.equal((await call({ headers: { 'x-webhook-secret': 'nope' } })).status, 401);
   assert.equal((await call({ headers: {} })).status, 401);
   assert.equal(store.tables.runs.size, 0);
-  assert.equal((await store.get('buttons', 'btn1')).automation_id, null);
+  assert.equal((await store.get('buttons', 'btn1')).automation_id, AUTOMATION);
 });
 
 test('bad secret status is configurable', async () => {
@@ -111,13 +152,11 @@ test('clicker not in whitelist is rejected (and empty whitelist rejects everyone
     assert.equal(res.status, 200);
     assert.equal(res.body.reason, 'clicker_not_allowed');
     assert.equal((await store.get('runs', EVENT)).clicker_notion_user_id, CLICKER);
-    // Binding still happens: the request did come from the configured automation.
-    assert.equal((await store.get('buttons', 'btn1')).automation_id, AUTOMATION);
   }
 });
 
 test('disabled button is rejected and not bound', async () => {
-  const { store, call } = setup({ button: { enabled: false } });
+  const { store, call } = setup({ button: { enabled: false, automation_id: null } });
   assert.equal((await call()).body.reason, 'button_disabled');
   assert.equal((await store.get('buttons', 'btn1')).automation_id, null);
 });

@@ -35,7 +35,7 @@ function setup({ credential = {}, action = {}, tokenKey = KEY } = {}) {
   const store = createMemoryStore({
     credentials: [{ $id: 'cred1', owner: 'user_a', name: 'main', routine_fire_url: FIRE_URL, token_ciphertext: encryptToken(TOKEN, KEY), token_last4: 'ABCD', enabled: true, ...credential }],
     actions: [{ $id: 'act1', owner: 'user_a', name: '补全', prompt_template: '补全「{{知识点}}」', enabled: true, ...action }],
-    buttons: [{ $id: 'btn1', owner: 'user_a', name: 'b', action_id: 'act1', allowed_notion_user_ids: [payload.source.user_id], enabled: true, automation_id: null, secret_salt, secret_hash }],
+    buttons: [{ $id: 'btn1', owner: 'user_a', name: 'b', action_id: 'act1', allowed_notion_user_ids: [payload.source.user_id], enabled: true, automation_id: payload.source.automation_id, secret_salt, secret_hash }],
   });
   const call = (fetchImpl) =>
     handleRelay(

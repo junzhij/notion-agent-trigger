@@ -99,3 +99,23 @@ export function composeDispatchText(vars, renderedText) {
   const text = `${header}\n\n${renderedText ?? ''}`.trimEnd();
   return { text, tooLong: text.length > MAX_TEXT_LENGTH };
 }
+
+/**
+ * Default action template generated after a button's setup test: the page's parameters plus
+ * the instruction to act on @claude comments. (page_id / page_url come from the dispatch header.)
+ */
+export function defaultTemplate(propertyNames = []) {
+  const lines = propertyNames.map((name) => `- ${name}：{{${name}}}`);
+  return [
+    '请处理上面这个 Notion 页面（page_id：{{page_id}}）。',
+    '',
+    '页面参数：',
+    ...(lines.length ? lines : ['{{properties}}']),
+    '',
+    '步骤：',
+    '1. 用 Notion 连接器读取这个页面的正文，以及页面上的所有评论（包括行内评论）。',
+    '2. 找出提到 @claude 的评论，它们就是这次要做的事；你已经回复过的评论跳过。',
+    '3. 按评论的要求修改这个页面，然后在对应评论下回复，简要说明改了什么。',
+    '4. 如果没有待处理的 @claude 评论，不要改动页面，直接结束。',
+  ].join('\n');
+}

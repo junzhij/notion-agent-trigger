@@ -24,7 +24,9 @@
         { "key": "enabled", "type": "boolean", "required": false, "array": false, "default": true },
         { "key": "automation_id", "type": "varchar", "size": 64, "required": false, "array": false },
         { "key": "secret_salt", "type": "varchar", "size": 64, "required": true, "array": false },
-        { "key": "secret_hash", "type": "varchar", "size": 64, "required": true, "array": false }
+        { "key": "secret_hash", "type": "varchar", "size": 64, "required": true, "array": false },
+        { "key": "sample_payload", "type": "mediumtext", "required": false, "array": false },
+        { "key": "sample_captured_at", "type": "datetime", "required": false, "array": false }
       ],
       "indexes": [
         { "key": "idx_owner", "type": "key", "columns": ["owner"], "orders": ["ASC"] },
@@ -60,7 +62,7 @@
         { "key": "owner", "type": "varchar", "size": 64, "required": true, "array": false },
         { "key": "button_id", "type": "varchar", "size": 36, "required": true, "array": false },
         { "key": "action_id", "type": "varchar", "size": 36, "required": false, "array": false },
-        { "key": "status", "type": "string", "format": "enum", "elements": ["queued", "rejected", "dispatched", "failed", "done"], "required": true, "array": false },
+        { "key": "status", "type": "string", "format": "enum", "elements": ["test", "queued", "rejected", "dispatched", "failed", "done"], "required": true, "array": false },
         { "key": "reject_reason", "type": "varchar", "size": 64, "required": false, "array": false },
         { "key": "page_id", "type": "varchar", "size": 64, "required": false, "array": false },
         { "key": "page_url", "type": "varchar", "size": 512, "required": false, "array": false },
