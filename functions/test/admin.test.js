@@ -95,7 +95,7 @@ test('preview renders with the sample payload', async () => {
   const { api } = setup();
   const res = await api('POST', '/preview', { body: { prompt_template: '{{知识点}} / {{缺失}}' } });
   assert.equal(res.status, 200);
-  assert.equal(res.body.text, '费马引理 / ');
+  assert.equal(res.body.text, '[Notion 按钮触发]\n页面标题：费马引理\npage_id：41ac41ba-1344-81ba-a977-faa8f09d07d0\npage_url：https://app.notion.com/p/41ac41ba134481baa977faa8f09d07d0\n\n' + '费马引理 /');
   assert.deepEqual(res.body.missing, ['缺失']);
   assert.ok(res.body.available_variables.some((v) => v.name === '教材页码'));
   assert.ok(res.body.available_variables.some((v) => v.name === 'page_url' && v.builtin));
@@ -110,6 +110,27 @@ test('end to end: button created in admin, clicked in Notion, visible in runs', 
     })
   ).body;
 
+  assert.equal(button.setup_state, 'waiting_for_test');
+  assert.deepEqual(button.parameters, []);
+
+  // Setup test from Notion: binds and captures the parameters
+  const testEvent = structuredClone(payload);
+  testEvent.source.event_id = 'cccccccc-0000-0000-0000-000000000000';
+  const test1 = await handleRelay({ query: { b: button.id }, headers: { 'x-webhook-secret': secret }, body: testEvent }, { store });
+  assert.equal(test1.body.status, 'test');
+  const ready = (await api('GET', `/buttons/${button.id}`)).body.button;
+  assert.equal(ready.setup_state, 'ready');
+  assert.ok(ready.parameters.some((p) => p.name === '知识点' && p.type === 'title' && p.value === '费马引理'));
+  assert.ok(ready.parameters.some((p) => p.name === '教材页码' && p.type === 'number'));
+  assert.equal(ready.sample_payload, undefined);
+  assert.equal((await api('GET', `/buttons/${button.id}`, { token: 'tok-b' })).status, 404);
+
+  // Preview against the captured sample
+  const pv = await api('POST', '/preview', { body: { prompt_template: '{{知识点}}', button_id: button.id } });
+  assert.equal(pv.body.payload_source, 'button_sample');
+  assert.match(pv.body.text, /费马引理$/);
+  assert.equal((await api('POST', '/preview', { token: 'tok-b', body: { prompt_template: '', button_id: button.id } })).status, 404);
+
   const relay = await handleRelay(
     { query: { b: button.id }, headers: { 'x-webhook-secret': secret }, body: payload },
     { store },
@@ -117,8 +138,9 @@ test('end to end: button created in admin, clicked in Notion, visible in runs', 
   assert.equal(relay.body.status, 'queued');
 
   const runs = await api('GET', '/runs');
-  assert.equal(runs.body.runs.length, 1);
-  assert.equal(runs.body.runs[0].rendered_text, '补全 费马引理');
+  assert.equal(runs.body.runs.length, 2);
+  assert.equal(runs.body.runs[1].status, 'test');
+  assert.equal(runs.body.runs[0].rendered_text, '[Notion 按钮触发]\n页面标题：费马引理\npage_id：41ac41ba-1344-81ba-a977-faa8f09d07d0\npage_url：https://app.notion.com/p/41ac41ba134481baa977faa8f09d07d0\n\n' + '补全 费马引理');
   assert.equal((await api('GET', '/runs', { token: 'tok-b' })).body.runs.length, 0);
   assert.equal((await api('GET', `/runs/${payload.source.event_id}`, { token: 'tok-b' })).status, 404);
 

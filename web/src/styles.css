@@ -98,3 +98,17 @@ table.runs td:nth-child(3) { min-width: 9rem; }
   .grid, .split { grid-template-columns: 1fr; flex-direction: column; }
   .split .list { width: 100%; }
 }
+
+.steps { margin: 0.25rem 0 0.75rem; padding-left: 1.25rem; line-height: 1.7; }
+.badge.ok { background: #dbeddb; color: #2b593f; }
+.status.test { background: #e8deee; color: #5a3e6b; }
+table.params { border-collapse: collapse; width: 100%; }
+table.params th, table.params td { text-align: left; padding: 0.3rem 0.5rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+table.params th { font-weight: 500; color: var(--muted); font-size: 0.85rem; }
+button.link.left { align-self: flex-start; }
+.spinner {
+  display: inline-block; width: 0.8em; height: 0.8em; margin-right: 0.3em; vertical-align: -0.1em;
+  border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }

@@ -9,13 +9,14 @@ export class ConflictError extends Error {
   }
 }
 
-export const TABLES = ['buttons', 'actions', 'runs'];
+export const TABLES = ['buttons', 'actions', 'runs', 'credentials'];
 
 export function tableIdsFromEnv(env = process.env) {
   return {
     buttons: env.TABLE_BUTTONS || 'buttons',
     actions: env.TABLE_ACTIONS || 'actions',
     runs: env.TABLE_RUNS || 'runs',
+    credentials: env.TABLE_CREDENTIALS || 'credentials',
   };
 }
 

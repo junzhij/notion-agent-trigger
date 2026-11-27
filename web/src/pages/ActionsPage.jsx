@@ -87,11 +87,13 @@ export default function ActionsPage() {
   );
 }
 
-function ActionEditor({ action, onSaved, onDeleted }) {
+export function ActionEditor({ action, onSaved, onDeleted, previewButtonId = null }) {
   const api = useApi();
   const [name, setName] = useState(action.name);
   const [template, setTemplate] = useState(action.prompt_template);
   const [enabled, setEnabled] = useState(action.enabled);
+  const [credentialId, setCredentialId] = useState(action.credential_id ?? '');
+  const [credentials, setCredentials] = useState([]);
   const [preview, setPreview] = useState(null);
   const [error, setError] = useState(null);
   const [saved, setSaved] = useState(false);
@@ -101,20 +103,35 @@ function ActionEditor({ action, onSaved, onDeleted }) {
   useEffect(() => {
     const t = setTimeout(async () => {
       try {
-        setPreview(await api('POST', '/preview', { prompt_template: template }));
+        setPreview(await api('POST', '/preview', { prompt_template: template, button_id: previewButtonId }));
       } catch (e) {
         setError(e);
       }
     }, 300);
     return () => clearTimeout(t);
-  }, [api, template]);
+  }, [api, template, previewButtonId]);
 
-  const dirty = name !== action.name || template !== action.prompt_template || enabled !== action.enabled;
+  useEffect(() => {
+    api('GET', '/credentials')
+      .then((res) => setCredentials(res.credentials))
+      .catch(setError);
+  }, [api]);
+
+  const dirty =
+    name !== action.name ||
+    template !== action.prompt_template ||
+    enabled !== action.enabled ||
+    credentialId !== (action.credential_id ?? '');
 
   const save = async () => {
     try {
       setError(null);
-      await api('PATCH', `/actions/${action.id}`, { name, prompt_template: template, enabled });
+      await api('PATCH', `/actions/${action.id}`, {
+        name,
+        prompt_template: template,
+        enabled,
+        credential_id: credentialId || null,
+      });
       setSaved(true);
       setTimeout(() => setSaved(false), 1500);
       await onSaved();
@@ -157,6 +174,18 @@ function ActionEditor({ action, onSaved, onDeleted }) {
       </div>
 
       <label>
+        使用的 Claude 凭证
+        <select value={credentialId} onChange={(e) => setCredentialId(e.target.value)}>
+          <option value="">默认（最新的已启用凭证）</option>
+          {credentials.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}（••••{c.token_last4}）{c.enabled ? '' : '［停用］'}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label>
         提示词模板
         <textarea ref={textareaRef} rows={12} value={template} onChange={(e) => setTemplate(e.target.value)} className="mono" />
       </label>
@@ -171,7 +200,12 @@ function ActionEditor({ action, onSaved, onDeleted }) {
               </button>
             ))}
           </div>
-          <h4>预览（用示例页面「费马引理」渲染）</h4>
+          <h4>
+            预览：实际发给 Claude 的文本
+            <span className="muted small">
+              {preview.payload_source === 'button_sample' ? '（用测试 webhook 收到的页面渲染）' : '（用示例页面「费马引理」渲染）'}
+            </span>
+          </h4>
           {preview.missing.length > 0 && <p className="warn">未知变量（会被替换为空）：{preview.missing.join('、')}</p>}
           {preview.tooLong && <p className="warn">渲染结果超过 {preview.max_length} 字符。</p>}
           <pre className="preview">{preview.text}</pre>
@@ -182,9 +216,11 @@ function ActionEditor({ action, onSaved, onDeleted }) {
         <button className="primary" disabled={!dirty} onClick={save}>
           {saved ? '已保存' : '保存'}
         </button>
-        <button className="danger" onClick={remove}>
-          删除
-        </button>
+        {onDeleted && (
+          <button className="danger" onClick={remove}>
+            删除
+          </button>
+        )}
         <span className="muted small grow right">更新于 {fmtTime(action.updated_at)}</span>
       </div>
     </div>
